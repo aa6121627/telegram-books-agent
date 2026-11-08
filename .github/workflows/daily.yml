@@ -1,0 +1,68 @@
+name: Daily Telegram Books Agent
+
+on:
+  schedule:
+    # 07:17 Africa/Cairo. Avoid minute 00 because scheduled runs can be delayed at peak load.
+    - cron: "17 7 * * *"
+      timezone: "Africa/Cairo"
+  workflow_dispatch:
+
+concurrency:
+  group: telegram-books-agent
+  cancel-in-progress: false
+
+jobs:
+  process-next-book:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350
+
+    env:
+      TG_API_ID: ${{ secrets.TG_API_ID }}
+      TG_API_HASH: ${{ secrets.TG_API_HASH }}
+      TG_SESSION: ${{ secrets.TG_SESSION }}
+      TG_CHANNEL: altfwok
+      GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
+      GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
+      GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
+      GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+      FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+      MAX_BOOK_MB: "8000"
+      WORK_DIR: ${{ runner.temp }}/books-work
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: npm install --omit=dev
+
+      - name: Configure Firebase service account
+        env:
+          FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || {
+            echo "Missing FIREBASE_SERVICE_ACCOUNT_JSON secret"
+            exit 1
+          }
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+          chmod 600 "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Check available temporary disk
+        run: |
+          df -h "$RUNNER_TEMP"
+          mkdir -p "$WORK_DIR"
+
+      - name: Process latest unprocessed book from @altfwok
+        run: npm run run
+
+      - name: Clean temporary files
+        if: always()
+        run: |
+          rm -rf "$WORK_DIR"
+          rm -f "$RUNNER_TEMP/firebase-service-account.json"
