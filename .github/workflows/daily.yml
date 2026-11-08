@@ -2,7 +2,8 @@
 name: Telegram Books Approval Bot
 
 on:
-  # يظل التشغيل يدويًا حتى اكتمال واختبار مسار الموافقة.
+  schedule:
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 concurrency:
@@ -97,8 +98,8 @@ jobs:
           echo "Work directory:"
           echo "$WORK_DIR"
 
-      # تشغيل النظام لمعالجة الكتاب
-      - name: Process latest unprocessed book from @altfwok
+      # تشغيل بوت الموافقات
+      - name: Process Telegram updates
         shell: bash
         run: npm run run
 
