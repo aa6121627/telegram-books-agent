@@ -2,10 +2,7 @@
 name: Daily Telegram Books Agent
 
 on:
-  schedule:
-    # تشغيل يومي الساعة 07:17 بتوقيت القاهرة
-    - cron: "17 7 * * *"
-      timezone: "Africa/Cairo"
+  # تم تعطيل الجدولة القديمة لأنها ترفع تلقائيًا دون موافقة المستخدم.
   workflow_dispatch:
 
 concurrency:
