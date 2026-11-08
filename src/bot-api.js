@@ -82,3 +82,9 @@ export function sendDocument(chatId, document, caption = "", options = {}) {
     chat_id: chatId, document, ...(caption ? { caption } : {}), ...options
   });
 }
+
+export function editMessageCaption(chatId, messageId, caption, options = {}) {
+  return telegramApi("editMessageCaption", {
+    chat_id: chatId, message_id: messageId, caption, ...options
+  });
+}
