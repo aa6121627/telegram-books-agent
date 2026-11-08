@@ -1,5 +1,3 @@
-import fs from "node:fs/promises";
-
 const BOT = "top4top_bot";
 
 function urlsFrom(text) {
@@ -7,38 +5,40 @@ function urlsFrom(text) {
 }
 
 export async function uploadCoverAndGetDirectLink(client, coverPath) {
-  // This is a user-account MTProto action, not Bot API bot-to-bot messaging.
   await client.sendMessage(BOT, { message: "/start" });
-  await new Promise(resolve => setTimeout(resolve, 1200));
+  await new Promise(resolve => setTimeout(resolve, 1500));
 
+  // Snapshot recent bot messages so we only inspect the response to this upload.
   const before = new Set();
-  for await (const m of client.iterMessages(BOT, { limit: 5 })) before.add(String(m.id));
+  for await (const message of client.iterMessages(BOT, { limit: 10 })) {
+    before.add(String(message.id));
+  }
 
+  // The input is a JPG; send it as a photo, not as a forced document.
   await client.sendFile(BOT, {
     file: coverPath,
-    forceDocument: true
+    forceDocument: false
   });
 
-  const deadline = Date.now() + 45000;
-
+  const deadline = Date.now() + 60000;
   while (Date.now() < deadline) {
     await new Promise(resolve => setTimeout(resolve, 2500));
 
-    for await (const m of client.iterMessages(BOT, { limit: 10 })) {
-      if (before.has(String(m.id))) continue;
+    for await (const message of client.iterMessages(BOT, { limit: 15 })) {
+      if (before.has(String(message.id))) continue;
 
-      const links = urlsFrom(m.message);
+      const links = urlsFrom(message.message);
       if (!links.length) continue;
 
-      const direct = links.find(url =>
-        /\.(jpe?g|png|webp)(\?|$)/i.test(url) ||
-        /top4top\.io\/.*\.(jpe?g|png|webp)/i.test(url)
+      const directImage = links.find(url =>
+        /\.(jpe?g|png|webp)(\?[^\s]*)?$/i.test(url) ||
+        /top4top\.(io|net|org)\//i.test(url)
       );
 
-      if (direct) return direct;
+      if (directImage) return directImage;
       if (links.length === 1) return links[0];
     }
   }
 
-  throw new Error("Top4Top did not return an image URL within 45 seconds. Verify the bot response format and file acceptance.");
+  throw new Error("Top4Top did not return a link within 60 seconds. Check the bot's latest reply and its accepted upload format.");
 }
