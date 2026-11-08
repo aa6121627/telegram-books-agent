@@ -1,6 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
-import { withTelegram, findLatestBook, downloadBookAndCover } from "./telegram.js";
+import { withTelegram, findLatestBook, downloadBook } from "./telegram.js";
+import { extractFirstPageCover } from "./cover.js";
 import { uploadToDrive } from "./drive.js";
 import { uploadCoverAndGetDirectLink } from "./top4top.js";
 import {
@@ -47,7 +48,9 @@ async function main() {
     let localFiles = null;
 
     try {
-      localFiles = await downloadBookAndCover(client, message, workDir);
+      localFiles = await downloadBook(client, message, workDir);
+      localFiles.coverPath = path.join(workDir, `${message.id}-cover.jpg`);
+      await extractFirstPageCover(localFiles.bookPath, localFiles.coverPath);
 
       const bookName = cleanBookName(localFiles.safeName);
       const drive = await uploadToDrive(
