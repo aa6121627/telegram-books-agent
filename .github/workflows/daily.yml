@@ -1,9 +1,8 @@
-
 name: Telegram Books Approval Bot
 
 on:
-  schedule:
-    - cron: "*/5 * * * *"
+  repository_dispatch:
+    types: [telegram_update]
   workflow_dispatch:
 
 concurrency:
@@ -14,7 +13,7 @@ permissions:
   contents: read
 
 jobs:
-  process-next-book:
+  process-telegram-update:
     runs-on: ubuntu-latest
     timeout-minutes: 350
 
@@ -25,46 +24,32 @@ jobs:
       TG_CHANNEL: altfwok
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       ADMIN_TELEGRAM_ID: "1263813431"
+      TELEGRAM_UPDATE_JSON: ${{ toJSON(github.event.client_payload.update) }}
 
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
       GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
-
       FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
-
       MAX_BOOK_MB: "8000"
 
     steps:
-      # تحميل ملفات المشروع
       - name: Checkout
         uses: actions/checkout@v4
 
-      # تثبيت Poppler لاستخراج الصفحة الأولى من PDF
       - name: Install Poppler
-        shell: bash
         run: |
           sudo apt-get update
           sudo apt-get install -y poppler-utils
 
-      # التأكد من توفر pdftoppm
-      - name: Verify Poppler
-        shell: bash
-        run: |
-          command -v pdftoppm
-          pdftoppm -v
-
-      # إعداد Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
-      # تثبيت المكتبات
       - name: Install dependencies
         run: npm install --omit=dev
 
-      # إعداد بيانات Firebase
       - name: Configure Firebase service account
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
@@ -74,39 +59,20 @@ jobs:
             echo "Missing FIREBASE_SERVICE_ACCOUNT_JSON secret"
             exit 1
           fi
-
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
-
           chmod 600 "$RUNNER_TEMP/firebase-service-account.json"
-
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
 
-      # تحديد مجلد العمل
       - name: Configure work directory
-        shell: bash
         run: |
           echo "WORK_DIR=$RUNNER_TEMP/books-work" >> "$GITHUB_ENV"
           mkdir -p "$RUNNER_TEMP/books-work"
 
-      # التحقق من المساحة المتاحة
-      - name: Check available temporary disk
-        shell: bash
-        run: |
-          echo "Available disk space:"
-          df -h "$RUNNER_TEMP"
-
-          echo "Work directory:"
-          echo "$WORK_DIR"
-
-      # تشغيل بوت الموافقات
-      - name: Process Telegram updates
-        shell: bash
+      - name: Process Telegram update
         run: npm run run
 
-      # حذف الملفات المؤقتة حتى عند فشل التشغيل
       - name: Clean temporary files
         if: always()
-        shell: bash
         run: |
           rm -rf "$RUNNER_TEMP/books-work"
           rm -f "$RUNNER_TEMP/firebase-service-account.json"
