@@ -1,8 +1,9 @@
+
 name: Daily Telegram Books Agent
 
 on:
   schedule:
-    # 07:17 Africa/Cairo. Avoid minute 00 because scheduled runs can be delayed at peak load.
+    # تشغيل يومي الساعة 07:17 بتوقيت القاهرة
     - cron: "17 7 * * *"
       timezone: "Africa/Cairo"
   workflow_dispatch:
@@ -10,6 +11,9 @@ on:
 concurrency:
   group: telegram-books-agent
   cancel-in-progress: false
+
+permissions:
+  contents: read
 
 jobs:
   process-next-book:
@@ -21,48 +25,74 @@ jobs:
       TG_API_HASH: ${{ secrets.TG_API_HASH }}
       TG_SESSION: ${{ secrets.TG_SESSION }}
       TG_CHANNEL: altfwok
+
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
       GOOGLE_REFRESH_TOKEN: ${{ secrets.GOOGLE_REFRESH_TOKEN }}
       GOOGLE_DRIVE_FOLDER_ID: ${{ secrets.GOOGLE_DRIVE_FOLDER_ID }}
+
       FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
+
       MAX_BOOK_MB: "8000"
-      WORK_DIR: ${{ runner.temp }}/books-work
 
     steps:
+      # تحميل ملفات المشروع
       - name: Checkout
         uses: actions/checkout@v4
 
+      # إعداد Node.js
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "22"
 
+      # تثبيت المكتبات
       - name: Install dependencies
         run: npm install --omit=dev
 
+      # إعداد بيانات Firebase
       - name: Configure Firebase service account
         env:
           FIREBASE_SERVICE_ACCOUNT_JSON: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_JSON }}
+        shell: bash
         run: |
-          test -n "$FIREBASE_SERVICE_ACCOUNT_JSON" || {
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT_JSON" ]; then
             echo "Missing FIREBASE_SERVICE_ACCOUNT_JSON secret"
             exit 1
-          }
+          fi
+
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT_JSON" > "$RUNNER_TEMP/firebase-service-account.json"
+
           chmod 600 "$RUNNER_TEMP/firebase-service-account.json"
+
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
 
-      - name: Check available temporary disk
+      # تحديد مجلد العمل باستخدام متغير البيئة الصحيح
+      - name: Configure work directory
+        shell: bash
         run: |
-          df -h "$RUNNER_TEMP"
-          mkdir -p "$WORK_DIR"
+          echo "WORK_DIR=$RUNNER_TEMP/books-work" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/books-work"
 
+      # التحقق من المساحة المتاحة
+      - name: Check available temporary disk
+        shell: bash
+        run: |
+          echo "Available disk space:"
+          df -h "$RUNNER_TEMP"
+
+          echo "Work directory:"
+          echo "$WORK_DIR"
+
+      # تشغيل النظام لمعالجة الكتاب
       - name: Process latest unprocessed book from @altfwok
+        shell: bash
         run: npm run run
 
+      # حذف الملفات المؤقتة حتى عند فشل التشغيل
       - name: Clean temporary files
         if: always()
+        shell: bash
         run: |
-          rm -rf "$WORK_DIR"
+          rm -rf "$RUNNER_TEMP/books-work"
           rm -f "$RUNNER_TEMP/firebase-service-account.json"
