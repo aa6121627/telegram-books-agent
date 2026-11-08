@@ -186,3 +186,26 @@ The service account JSON stored in `FIREBASE_SERVICE_ACCOUNT_JSON` must belong t
 ## 10. Channel
 
 The configured public channel username is `altfwok` (the URL is https://t.me/altfwok). The code expects `TG_CHANNEL=altfwok`, without the `@`.
+
+
+## Telegram approval bot (GitHub Actions)
+
+The current entry point polls Telegram Bot API updates and accepts documents only from the configured operator. It creates a PDF first-page preview, then waits for an explicit approval callback before uploading the book to Google Drive, sending the cover to @top4top_bot, and writing the four-field record under /book.
+
+Required GitHub Actions secrets:
+- TELEGRAM_BOT_TOKEN
+- TG_API_ID
+- TG_API_HASH
+- TG_SESSION (must be the same Telegram user account that sends documents to the bot)
+- GOOGLE_CLIENT_ID
+- GOOGLE_CLIENT_SECRET
+- GOOGLE_REFRESH_TOKEN
+- GOOGLE_DRIVE_FOLDER_ID (optional)
+- FIREBASE_DATABASE_URL
+- FIREBASE_SERVICE_ACCOUNT_JSON
+
+The authorized operator ID is configured as 1263813431 in the workflow. No Firebase Storage bucket is used; the source document remains in the operator's Telegram conversation and is downloaded again when approved.
+
+The workflow polls every five minutes. This is not real-time. GitHub-hosted runners have finite disk and execution limits; the configured 8000 MB is only an application-side limit, not a guarantee that an 8 GB file can be processed. PDF is currently the only supported format for first-page cover extraction. Test with a small PDF first.
+
+Important: the Telegram MTProto session must belong to the same user who sends the file to the bot. The code matches the Bot API message ID against the outgoing message in that user's dialog with the bot. This must be verified with a real test message before relying on the workflow.
