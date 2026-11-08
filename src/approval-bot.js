@@ -49,45 +49,40 @@ function getDocument(message) {
 }
 async function findMtprotoMessage(client, botUsername, pending) {
   const entity = await client.getEntity(botUsername);
-  const me = await client.getMe();
   const expectedId = Number(pending.sourceMessageId);
   const expectedSize = Number(pending.size || 0);
   const expectedName = String(pending.originalName || "").trim();
+  const expectedDate = Number(pending.sourceDate || 0);
+  const candidates = [];
+  let exactMatch = null;
 
-  console.log("[MTProto] account:", JSON.stringify({
-    id: String(me.id || ""),
-    username: me.username || null,
-    bot: botUsername
-  }));
-  console.log("[MTProto] looking for:", JSON.stringify({
+  console.log("[MTProto] lookup:", JSON.stringify({
+    accountId: String((await client.getMe()).id || ""),
+    bot: botUsername,
     sourceMessageId: expectedId,
-    sourceChatId: String(pending.sourceChatId || ""),
+    sourceDate: expectedDate,
     fileName: expectedName,
     size: expectedSize
   }));
 
-  const documents = [];
-  let exactMatch = null;
   for await (const m of client.iterMessages(entity, { limit: 500 })) {
     if (!m.media?.document) continue;
-    const item = {
-      message: m,
-      id: Number(m.id),
-      name: getDocumentName(m),
-      size: getDocumentSize(m),
-      outgoing: Boolean(m.out)
-    };
-    if (documents.length < 20) {
-      documents.push({
-        id: item.id,
-        name: item.name,
-        size: item.size,
-        outgoing: item.outgoing
-      });
-    }
-    if (item.id === expectedId) {
-      exactMatch = item.message;
+    const name = getDocumentName(m);
+    const size = getDocumentSize(m);
+    const dateValue = m.date instanceof Date ? Math.floor(m.date.getTime()/1000) : Number(m.date || 0);
+    if (Number(m.id) === expectedId) {
+      exactMatch = m;
       break;
+    }
+    if (name === expectedName && size === expectedSize) {
+      candidates.push({
+        message: m,
+        id: Number(m.id),
+        name,
+        size,
+        date: dateValue,
+        outgoing: Boolean(m.out)
+      });
     }
   }
 
@@ -96,30 +91,29 @@ async function findMtprotoMessage(client, botUsername, pending) {
     return exactMatch;
   }
 
-  console.log("[MTProto] exact id not found; recent documents:", JSON.stringify(documents));
-  const allCandidates = [];
-  for await (const m of client.iterMessages(entity, { limit: 500 })) {
-    if (!m.media?.document) continue;
-    const name = getDocumentName(m);
-    const size = getDocumentSize(m);
-    const sameName = expectedName && name === expectedName;
-    const sameSize = expectedSize > 0 && size === expectedSize;
-    if (sameName && (!expectedSize || sameSize)) {
-      allCandidates.push(m);
+  const outgoing = candidates.filter(x => x.outgoing);
+  const pool = outgoing.length ? outgoing : candidates;
+  if (pool.length) {
+    pool.sort((a,b) => {
+      const da = expectedDate && a.date ? Math.abs(a.date-expectedDate) : 0;
+      const db = expectedDate && b.date ? Math.abs(b.date-expectedDate) : 0;
+      return da-db || b.id-a.id;
+    });
+    const best = pool[0];
+    const second = pool[1];
+    const bestDistance = expectedDate && best.date ? Math.abs(best.date-expectedDate) : null;
+    const secondDistance = second && expectedDate && second.date ? Math.abs(second.date-expectedDate) : null;
+    console.log("[MTProto] candidates:", JSON.stringify(pool.map(x => ({
+      id:x.id, date:x.date, outgoing:x.outgoing, name:x.name, size:x.size
+    }))));
+    if (!second || bestDistance === null || secondDistance === null || bestDistance < secondDistance) {
+      console.log("[MTProto] selected matching upload:", best.id);
+      return best.message;
     }
   }
 
-  if (allCandidates.length === 1) {
-    console.log("[MTProto] recovered by unique filename/size match:", JSON.stringify({
-      id: Number(allCandidates[0].id),
-      name: getDocumentName(allCandidates[0]),
-      size: getDocumentSize(allCandidates[0])
-    }));
-    return allCandidates[0];
-  }
-
   throw new Error(
-    `لم يتم العثور على الرسالة في محادثة البوت عبر MTProto. رقم الرسالة: ${expectedId}، اسم الملف: ${expectedName || "غير معروف"}، الحجم: ${expectedSize} بايت، عدد الملفات المطابقة: ${allCandidates.length}. راجع سجل GitHub Actions للتشخيص.`
+    `تعذر تحديد رسالة الملف بشكل آمن في محادثة البوت. رقم Bot API: ${expectedId}، تاريخ الإرسال: ${expectedDate}، الملفات المطابقة: ${JSON.stringify(candidates.map(x=>({id:x.id,date:x.date,outgoing:x.outgoing}))) }.`
   );
 }
 async function downloadSource(client, pending, dest) {
@@ -149,7 +143,7 @@ async function receiveDocument(message) {
   const id=String(message.message_id);
   await savePendingBook(id,{
     chatId, sourceMessageId:message.message_id, sourceChatId:chatId,
-    originalName:doc.fileName, size:doc.size, book_name:cleanName(doc.fileName),
+    originalName:doc.fileName, size:doc.size, sourceDate:Number(message.date||0), book_name:cleanName(doc.fileName),
     book_type:grade, status:"preparing"
   });
   await sendMessage(chatId,"وصل الكتاب. جارٍ تجهيز المعاينة واستخراج الغلاف...");
