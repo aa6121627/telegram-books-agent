@@ -24,7 +24,7 @@ function normalizeDigits(s) {
   return String(s).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
 }
 function normalizedFileName(name) {
-  return normalizeDigits(safeName(name))
+  return normalizeDigits(safeName(name).replace(/\.[^.]+$/,""))
     .replace(/[أإآ]/g,"ا")
     .replace(/ى/g,"ي")
     .replace(/[ـ]/g,"")
