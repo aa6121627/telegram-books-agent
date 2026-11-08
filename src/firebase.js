@@ -23,9 +23,27 @@ export async function markProcessing(messageId, details = {}) {
   });
 }
 
+/** Save the public book record under the root node: book/<telegram-message-id>. */
 export async function saveBook(messageId, record) {
+  const requiredKeys = ["book_img", "book_name", "book_type", "book_url"];
+  for (const key of requiredKeys) {
+    if (record[key] === undefined || record[key] === null || record[key] === "") {
+      throw new Error(`Cannot save book: missing ${key}`);
+    }
+  }
+  if (![1, 2, 3].includes(Number(record.book_type))) {
+    throw new Error(`Invalid book_type: ${record.book_type}`);
+  }
+
+  const bookRecord = {
+    book_img: String(record.book_img),
+    book_name: String(record.book_name),
+    book_type: Number(record.book_type),
+    book_url: String(record.book_url)
+  };
+
   const updates = {};
-  updates[`books/${messageId}`] = record;
+  updates[`book/${messageId}`] = bookRecord;
   updates[`bookAgent/processed/${messageId}`] = {
     done: true,
     completedAt: Date.now()
@@ -33,8 +51,8 @@ export async function saveBook(messageId, record) {
   updates[`bookAgent/jobs/${messageId}`] = {
     status: "completed",
     completedAt: Date.now(),
-    name: record.name,
-    driveFileId: record.driveFileId || null
+    book_name: bookRecord.book_name,
+    book_type: bookRecord.book_type
   };
   await db.ref().update(updates);
 }
