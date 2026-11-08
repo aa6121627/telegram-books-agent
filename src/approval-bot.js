@@ -47,17 +47,85 @@ function getDocument(message) {
   if(message.video) return {fileName:message.video.file_name || "book.mp4",size:Number(message.video.file_size||0)};
   return null;
 }
-async function findMtprotoMessage(client, botUsername, id) {
-  const entity=await client.getEntity(botUsername);
-  for await (const m of client.iterMessages(entity,{limit:100})) {
-    if(Number(m.id)===Number(id) && m.media?.document) return m;
+async function findMtprotoMessage(client, botUsername, pending) {
+  const entity = await client.getEntity(botUsername);
+  const me = await client.getMe();
+  const expectedId = Number(pending.sourceMessageId);
+  const expectedSize = Number(pending.size || 0);
+  const expectedName = String(pending.originalName || "").trim();
+
+  console.log("[MTProto] account:", JSON.stringify({
+    id: String(me.id || ""),
+    username: me.username || null,
+    bot: botUsername
+  }));
+  console.log("[MTProto] looking for:", JSON.stringify({
+    sourceMessageId: expectedId,
+    sourceChatId: String(pending.sourceChatId || ""),
+    fileName: expectedName,
+    size: expectedSize
+  }));
+
+  const documents = [];
+  let exactMatch = null;
+  for await (const m of client.iterMessages(entity, { limit: 500 })) {
+    if (!m.media?.document) continue;
+    const item = {
+      message: m,
+      id: Number(m.id),
+      name: getDocumentName(m),
+      size: getDocumentSize(m),
+      outgoing: Boolean(m.out)
+    };
+    if (documents.length < 20) {
+      documents.push({
+        id: item.id,
+        name: item.name,
+        size: item.size,
+        outgoing: item.outgoing
+      });
+    }
+    if (item.id === expectedId) {
+      exactMatch = item.message;
+      break;
+    }
   }
-  throw new Error("لم أجد الملف في محادثة MTProto. تأكد أن TG_SESSION لحسابك نفسه الذي أرسل الملف إلى البوت، وأن الرسالة ما زالت موجودة.");
+
+  if (exactMatch) {
+    console.log("[MTProto] exact message id matched:", expectedId);
+    return exactMatch;
+  }
+
+  console.log("[MTProto] exact id not found; recent documents:", JSON.stringify(documents));
+  const allCandidates = [];
+  for await (const m of client.iterMessages(entity, { limit: 500 })) {
+    if (!m.media?.document) continue;
+    const name = getDocumentName(m);
+    const size = getDocumentSize(m);
+    const sameName = expectedName && name === expectedName;
+    const sameSize = expectedSize > 0 && size === expectedSize;
+    if (sameName && (!expectedSize || sameSize)) {
+      allCandidates.push(m);
+    }
+  }
+
+  if (allCandidates.length === 1) {
+    console.log("[MTProto] recovered by unique filename/size match:", JSON.stringify({
+      id: Number(allCandidates[0].id),
+      name: getDocumentName(allCandidates[0]),
+      size: getDocumentSize(allCandidates[0])
+    }));
+    return allCandidates[0];
+  }
+
+  throw new Error(
+    `لم يتم العثور على الرسالة في محادثة البوت عبر MTProto. رقم الرسالة: ${expectedId}، اسم الملف: ${expectedName || "غير معروف"}، الحجم: ${expectedSize} بايت، عدد الملفات المطابقة: ${allCandidates.length}. راجع سجل GitHub Actions للتشخيص.`
+  );
 }
 async function downloadSource(client, pending, dest) {
   const bot=process.env.BOT_USERNAME;
   if(!bot) throw new Error("Missing BOT_USERNAME secret (username without @).");
-  const m=await findMtprotoMessage(client,bot,pending.sourceMessageId);
+  const m=await findMtprotoMessage(client,bot,pending);
   const size=getDocumentSize(m);
   const max=Number(process.env.MAX_BOOK_MB||8000)*1024*1024;
   if(!size || size>max) throw new Error("حجم الملف غير معروف أو يتجاوز MAX_BOOK_MB.");
