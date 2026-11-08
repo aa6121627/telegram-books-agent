@@ -114,6 +114,7 @@ export async function claimWebhookUpdate(updateId) {
   const ref = db.ref(`bookAgent/webhookUpdates/${updateId}`);
   let claimed = false;
   await ref.transaction(current => {
+    claimed = false;
     const now = Date.now();
     if (current?.status === "completed") return;
     if (current?.status === "processing" && now - Number(current.startedAt || 0) < 15 * 60 * 1000) return;
