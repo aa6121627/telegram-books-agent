@@ -1,3 +1,5 @@
+import fs from "node:fs/promises";
+
 const API_BASE = "https://api.telegram.org";
 
 function getToken() {
@@ -21,20 +23,21 @@ export async function telegramApi(method, payload = {}) {
   return data.result;
 }
 
-export function sendMessage(chatId, text, options = {}) {
-  return telegramApi("sendMessage", {
-    chat_id: chatId,
-    text,
-    ...options
+export function getUpdates(offset, timeout = 0) {
+  return telegramApi("getUpdates", {
+    ...(Number.isInteger(offset) && offset > 0 ? { offset } : {}),
+    timeout,
+    allowed_updates: ["message", "callback_query"]
   });
+}
+
+export function sendMessage(chatId, text, options = {}) {
+  return telegramApi("sendMessage", { chat_id: chatId, text, ...options });
 }
 
 export function editMessageText(chatId, messageId, text, options = {}) {
   return telegramApi("editMessageText", {
-    chat_id: chatId,
-    message_id: messageId,
-    text,
-    ...options
+    chat_id: chatId, message_id: messageId, text, ...options
   });
 }
 
@@ -48,31 +51,34 @@ export function answerCallbackQuery(callbackQueryId, text = "", showAlert = fals
 
 export function sendPhoto(chatId, photo, caption = "", options = {}) {
   return telegramApi("sendPhoto", {
-    chat_id: chatId,
-    photo,
-    ...(caption ? { caption } : {}),
-    ...options
+    chat_id: chatId, photo, ...(caption ? { caption } : {}), ...options
   });
+}
+
+export async function sendPhotoFile(chatId, photoPath, caption = "", options = {}) {
+  const bytes = await fs.readFile(photoPath);
+  const form = new FormData();
+  form.set("chat_id", String(chatId));
+  form.set("photo", new Blob([bytes], { type: "image/jpeg" }), "cover.jpg");
+  if (caption) form.set("caption", caption);
+  for (const [key, value] of Object.entries(options)) {
+    form.set(key, typeof value === "string" ? value : JSON.stringify(value));
+  }
+
+  const response = await fetch(`${API_BASE}/bot${getToken()}/sendPhoto`, {
+    method: "POST",
+    body: form,
+    signal: AbortSignal.timeout(120_000)
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok || !data?.ok) {
+    throw new Error(`Telegram Bot API sendPhoto failed: ${data?.description || response.statusText}`);
+  }
+  return data.result;
 }
 
 export function sendDocument(chatId, document, caption = "", options = {}) {
   return telegramApi("sendDocument", {
-    chat_id: chatId,
-    document,
-    ...(caption ? { caption } : {}),
-    ...options
+    chat_id: chatId, document, ...(caption ? { caption } : {}), ...options
   });
-}
-
-export function getUpdates(offset = 0, limit = 100) {
-  return telegramApi("getUpdates", {
-    offset,
-    limit,
-    timeout: 0,
-    allowed_updates: ["message", "callback_query"]
-  });
-}
-
-export function getMe() {
-  return telegramApi("getMe");
 }
