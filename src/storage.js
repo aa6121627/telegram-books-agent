@@ -1,31 +1,31 @@
-import admin from "firebase-admin";
 import fs from "node:fs/promises";
 import path from "node:path";
+import { getStorage } from "firebase-admin/storage";
 
 function getBucket() {
   const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
-  if (!bucketName) throw new Error("Missing FIREBASE_STORAGE_BUCKET");
-  return admin.storage().bucket(bucketName);
+  if (!bucketName) {
+    throw new Error("Missing FIREBASE_STORAGE_BUCKET. Set it to your Firebase Storage bucket name.");
+  }
+  return getStorage().bucket(bucketName);
 }
 
-/**
- * Stores a pending book outside the public /book database node.
- * The object is private and addressed only by its generated path.
- */
+/** Store a private temporary copy. This does not create a public download URL. */
 export async function uploadPendingBook(localPath, messageId, originalName) {
   const bucket = getBucket();
-  const objectPath = `pending-books/${String(messageId)}/${path.basename(originalName)}`;
-  const file = bucket.file(objectPath);
+  const safeName = path.basename(String(originalName)).replace(/[^\p{L}\p{N}._ -]/gu, "_");
+  const objectPath = `pending-books/${String(messageId)}/${safeName}`;
 
   await bucket.upload(localPath, {
-    destination: file,
+    destination: objectPath,
     resumable: true,
     validation: "crc32c",
     metadata: {
       contentType: "application/octet-stream",
       metadata: {
         telegramMessageId: String(messageId),
-        originalName: String(originalName)
+        originalName: safeName,
+        temporary: "true"
       }
     }
   });
