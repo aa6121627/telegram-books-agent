@@ -164,6 +164,8 @@ async function handleCallback(q) {
   }
   if(action==="edit") {
     await updatePendingBook(id,{status:"editing"});
+    const {setState}=await import("./firebase.js");
+    await setState("editingPendingId",id);
     await sendMessage(p.chatId,"أرسل البيانات بهذا الشكل في رسالة واحدة:\nاسم الكتاب | رقم الصف (1 أو 2 أو 3)");
     await answerCallbackQuery(q.id,"أرسل الاسم والصف في رسالة واحدة."); return;
   }
