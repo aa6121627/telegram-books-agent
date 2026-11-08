@@ -6,7 +6,8 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: telegram-books-agent
+  # Keep /start responsive even while a long PDF job is running.
+  group: ${{ github.event.client_payload.update.message.text == '/start' && 'telegram-start-command' || 'telegram-books-agent' }}
   cancel-in-progress: false
 
 permissions:
