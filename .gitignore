@@ -1,0 +1,6 @@
+node_modules/
+.env
+*.session
+service-account*.json
+token*.json
+tmp/

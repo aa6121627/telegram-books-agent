@@ -1,0 +1,19 @@
+{
+  "name": "telegram-books-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "auth": "node src/create-session.js",
+    "run": "node src/main.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "dependencies": {
+    "firebase-admin": "^13.0.0",
+    "googleapis": "^144.0.0",
+    "input": "^1.0.1",
+    "teleproto": "^1.232.1"
+  }
+}
