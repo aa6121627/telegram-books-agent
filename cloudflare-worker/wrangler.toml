@@ -1,3 +1,3 @@
-name = "telegram-books-webhook"
+name = "telegram-books-agent"
 main = "src/index.js"
 compatibility_date = "2026-11-08"
