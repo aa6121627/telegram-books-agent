@@ -78,7 +78,7 @@ export async function setState(key, value) {
 export async function savePendingBook(messageId, pending) {
   await db.ref(`bookAgent/pending/${messageId}`).set({
     ...pending,
-    status: "awaiting_approval",
+    status: pending.status || "awaiting_approval",
     createdAt: Date.now(),
     updatedAt: Date.now()
   });
