@@ -23,17 +23,36 @@ function safeName(s) {
 function normalizeDigits(s) {
   return String(s).replace(/[٠-٩]/g,d=>String("٠١٢٣٤٥٦٧٨٩".indexOf(d))).replace(/[۰-۹]/g,d=>String("۰۱۲۳۴۵۶۷۸۹".indexOf(d)));
 }
+function normalizedFileName(name) {
+  return normalizeDigits(safeName(name))
+    .replace(/[أإآ]/g,"ا")
+    .replace(/ى/g,"ي")
+    .replace(/[ـ]/g,"")
+    .replace(/[_.-]+/g," ")
+    .replace(/\s+/g," ")
+    .trim()
+    .toLowerCase();
+}
 function detectGrade(name) {
-  const s=normalizeDigits(name).replace(/[أإآ]/g,"ا").replace(/ى/g,"ي").toLowerCase();
-  if(/الثالث\s+الثانوي|الصف\s+الثالث|(?:^|\D)3\s*ث/.test(s)) return 3;
-  if(/الثاني\s+الثانوي|الصف\s+الثاني|(?:^|\D)2\s*ث/.test(s)) return 2;
-  if(/الاول\s+الثانوي|الصف\s+الاول|(?:^|\D)1\s*ث/.test(s)) return 1;
+  const s = normalizedFileName(name);
+  if (/الثالث\s+الثانوي|الصف\s+الثالث|(?:^|\s)3(?:\s|$)|(?:^|\s)3\s*ث/.test(s)) return 3;
+  if (/الثاني\s+الثانوي|الصف\s+الثاني|(?:^|\s)2(?:\s|$)|(?:^|\s)2\s*ث/.test(s)) return 2;
+  if (/الاول\s+الثانوي|الصف\s+الاول|(?:^|\s)1(?:\s|$)|(?:^|\s)1\s*ث/.test(s)) return 1;
   return 0;
 }
 function cleanName(name) {
-  return safeName(name).replace(/\.[^.]+$/,"").replace(/الصف\s+(الاول|الثاني|الثالث)\s+الثانوي/g," ")
-    .replace(/(الاول|الثاني|الثالث)\s+الثانوي/g," ").replace(/(?:^|\s)[123]\s*ث(?:انوي)?(?=\s|$)/g," ")
-    .replace(/\s+/g," ").trim();
+  const grade = detectGrade(name);
+  let s = normalizedFileName(name).replace(/\.[^.]+$/,"");
+  // Remove year tokens such as 2027, without touching grade digits.
+  s = s.replace(/(?:^|\s)(?:19|20)\d{2}(?=\s|$)/g," ");
+  // Remove explicit grade labels and standalone grade number (1, 2 or 3).
+  s = s.replace(/الصف\s+(?:الاول|الثاني|الثالث)\s+الثانوي/g," ")
+    .replace(/(?:الاول|الثاني|الثالث)\s+الثانوي/g," ")
+    .replace(/(?:^|\s)[123]\s*ث(?:انوي)?(?=\s|$)/g," ");
+  if (grade) s = s.replace(new RegExp(`(^|\\s)${grade}(?=\\s|$)`,"g")," ");
+  // "بكالوريا" is used as a grade descriptor in these uploaded filenames.
+  s = s.replace(/\bبكالوريا\b/g," ");
+  return s.replace(/\s+/g," ").trim() || "كتاب جديد";
 }
 function keyboard(id) {
   return { inline_keyboard: [[
