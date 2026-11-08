@@ -56,7 +56,8 @@ export async function findLatestBook(client) {
   return messages[0] || null;
 }
 
-export async function downloadBookAndCover(client, message, directory) {
+/** Downloads only the book. The first-page cover is generated separately by cover.js. */
+export async function downloadBook(client, message, directory) {
   await fs.mkdir(directory, { recursive: true });
 
   const originalName = getDocumentName(message);
@@ -80,33 +81,8 @@ export async function downloadBookAndCover(client, message, directory) {
     }
   });
 
-  const coverPath = path.join(directory, `${message.id}-cover.jpg`);
-  let coverFound = false;
-  const channelEntity = await client.getEntity(channel);
+  const stat = await fs.stat(bookPath).catch(() => null);
+  if (!stat?.size) throw new Error("Telegram download finished but the book file is missing or empty.");
 
-  // First try the document's embedded thumbnail.
-  try {
-    const result = await client.downloadMedia(message, {
-      thumb: -1,
-      outputFile: coverPath
-    });
-    coverFound = Boolean(result) || (await fs.stat(coverPath).then(() => true).catch(() => false));
-  } catch {}
-
-  // If no embedded thumbnail exists, only accept a photo in the same Telegram album.
-  if (!coverFound && message.groupedId) {
-    for await (const candidate of client.iterMessages(channelEntity, { limit: 30 })) {
-      if (String(candidate.groupedId || "") === String(message.groupedId) && candidate.media?.photo) {
-        await client.downloadMedia(candidate, { outputFile: coverPath });
-        coverFound = true;
-        break;
-      }
-    }
-  }
-
-  if (!coverFound) {
-    throw new Error("No cover image found. Add the cover as a Telegram document thumbnail or in the same media album as the book.");
-  }
-
-  return { bookPath, coverPath, originalName, safeName, size };
+  return { bookPath, originalName, safeName, size };
 }
