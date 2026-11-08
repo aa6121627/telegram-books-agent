@@ -1,11 +1,11 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 import {
-  getUpdates, sendMessage, sendPhotoFile, editMessageText,
+  sendMessage, sendPhotoFile, editMessageText,
   answerCallbackQuery, telegramApi, editMessageCaption
 } from "./bot-api.js";
 import {
-  getBotUpdateOffset, setBotUpdateOffset, savePendingBook,
+  claimWebhookUpdate, finishWebhookUpdate, savePendingBook,
   getPendingBook, updatePendingBook, saveBook, markFailed
 } from "./firebase.js";
 import { withTelegram, getDocumentName, getDocumentSize } from "./telegram.js";
@@ -276,27 +276,43 @@ async function handleEdit(message) {
 }
 export async function runBot() {
   if(!ADMIN || !process.env.TELEGRAM_BOT_TOKEN) throw new Error("Set ADMIN_TELEGRAM_ID and TELEGRAM_BOT_TOKEN.");
-  const me=await telegramApi("getMe");
-  if(!me.username) throw new Error("Could not resolve bot username.");
-  process.env.BOT_USERNAME=me.username;
-  await telegramApi("deleteWebhook",{drop_pending_updates:false});
-  const offset=await getBotUpdateOffset();
-  const updates=await getUpdates(offset,0);
-  for(const u of updates) {
-    if(u.callback_query) await handleCallback(u.callback_query);
-    else if(u.message) {
-      if(String(u.message.from?.id||"")!==ADMIN) {
-        if(u.message.chat?.id) await sendMessage(u.message.chat.id,"هذا البوت خاص بالمشرف.");
-      } else if(await handleEdit(u.message)) {
+  const raw = process.env.TELEGRAM_UPDATE_JSON;
+  if (!raw || raw === "null") {
+    console.log("No Telegram update payload. Use a Telegram webhook dispatch or run the workflow with an update payload.");
+    return;
+  }
+
+  const update = JSON.parse(raw);
+  if (!Number.isInteger(update.update_id)) throw new Error("Invalid TELEGRAM_UPDATE_JSON: missing update_id.");
+  const claimed = await claimWebhookUpdate(update.update_id);
+  if (!claimed) {
+    console.log(`Duplicate Telegram update ignored: ${update.update_id}`);
+    return;
+  }
+
+  try {
+    const me=await telegramApi("getMe");
+    if(!me.username) throw new Error("Could not resolve bot username.");
+    process.env.BOT_USERNAME=me.username;
+
+    if(update.callback_query) {
+      await handleCallback(update.callback_query);
+    } else if(update.message) {
+      if(String(update.message.from?.id||"")!==ADMIN) {
+        if(update.message.chat?.id) await sendMessage(update.message.chat.id,"هذا البوت خاص بالمشرف.");
+      } else if(await handleEdit(update.message)) {
         // edit flow handled
-      } else if(getDocument(u.message)) {
-        await receiveDocument(u.message);
-        await preparePreview(u.message);
-      } else if(u.message.text==="/start") {
-        await sendMessage(u.message.chat.id,"أرسل ملف PDF إلى البوت لإعداد معاينة قبل الموافقة على رفعه.");
+      } else if(getDocument(update.message)) {
+        await receiveDocument(update.message);
+        await preparePreview(update.message);
+      } else if(update.message.text==="/start") {
+        await sendMessage(update.message.chat.id,"أرسل ملف PDF إلى البوت لإعداد معاينة قبل الموافقة على رفعه.");
       }
     }
-    await setBotUpdateOffset(u.update_id+1);
+    await finishWebhookUpdate(update.update_id, "completed");
+    console.log(`Processed Telegram update ${update.update_id}.`);
+  } catch (error) {
+    await finishWebhookUpdate(update.update_id, "failed", String(error).slice(0, 1000));
+    throw error;
   }
-  console.log(`Processed ${updates.length} Telegram update(s).`);
 }
