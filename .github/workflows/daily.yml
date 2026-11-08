@@ -1,8 +1,8 @@
 
-name: Daily Telegram Books Agent
+name: Telegram Books Approval Bot
 
 on:
-  # تم تعطيل الجدولة القديمة لأنها ترفع تلقائيًا دون موافقة المستخدم.
+  # يظل التشغيل يدويًا حتى اكتمال واختبار مسار الموافقة.
   workflow_dispatch:
 
 concurrency:
@@ -22,6 +22,9 @@ jobs:
       TG_API_HASH: ${{ secrets.TG_API_HASH }}
       TG_SESSION: ${{ secrets.TG_SESSION }}
       TG_CHANNEL: altfwok
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      ADMIN_TELEGRAM_ID: "1263813431"
+      FIREBASE_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
 
       GOOGLE_CLIENT_ID: ${{ secrets.GOOGLE_CLIENT_ID }}
       GOOGLE_CLIENT_SECRET: ${{ secrets.GOOGLE_CLIENT_SECRET }}
