@@ -209,3 +209,50 @@ The authorized operator ID is configured as 1263813431 in the workflow. No Fireb
 The workflow polls every five minutes. This is not real-time. GitHub-hosted runners have finite disk and execution limits; the configured 8000 MB is only an application-side limit, not a guarantee that an 8 GB file can be processed. PDF is currently the only supported format for first-page cover extraction. Test with a small PDF first.
 
 Important: the Telegram MTProto session must belong to the same user who sends the file to the bot. The code matches the Bot API message ID against the outgoing message in that user's dialog with the bot. This must be verified with a real test message before relying on the workflow.
+
+
+## 11. Instant Telegram webhook mode (Cloudflare Worker + GitHub Actions)
+
+The approval bot now supports webhook-triggered runs. GitHub Actions no longer polls Telegram every five minutes. Telegram sends each update to a Cloudflare Worker, which dispatches a `repository_dispatch` event to this repository; the workflow processes only that update. GitHub runner startup still adds some delay, so this is event-driven rather than guaranteed zero-latency.
+
+### Deploy the Worker
+
+1. Create a free Cloudflare account and open **Workers & Pages**.
+2. Create a Worker named `telegram-books-webhook`.
+3. Copy the contents of `cloudflare-worker/src/index.js` into the Worker's editor and deploy it. The `cloudflare-worker/wrangler.toml` file is provided for Wrangler-based deployment.
+4. In Worker **Settings > Variables and Secrets**, add these secrets:
+   - `GITHUB_TOKEN`: a fine-grained GitHub Personal Access Token restricted to this repository, with **Contents: Read and write** permission (needed for the repository dispatch endpoint).
+   - `TELEGRAM_WEBHOOK_SECRET`: a random 32-characters-or-longer value using only letters, numbers, underscores, and hyphens.
+5. Add this plain-text Worker variable:
+   - `GITHUB_REPOSITORY` = `aa6121627/telegram-books-agent`
+6. Copy the deployed Worker URL, for example `https://telegram-books-webhook.<your-subdomain>.workers.dev`.
+
+### Point Telegram to the Worker
+
+Run this once from a trusted terminal, replacing the placeholders. Do not publish the bot token or webhook secret:
+
+```bash
+curl -X POST "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://<YOUR-WORKER-URL>",
+    "secret_token": "<YOUR_TELEGRAM_WEBHOOK_SECRET>",
+    "allowed_updates": ["message", "callback_query"],
+    "drop_pending_updates": false
+  }'
+```
+
+Telegram should return `{"ok":true,"result":true,...}`. You can check the configuration with:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/getWebhookInfo"
+```
+
+### Important
+
+- Do not call `getUpdates` while the webhook is enabled. The bot now processes the update payload delivered by GitHub Actions.
+- Keep all existing GitHub repository secrets listed above. No Telegram bot token or GitHub token is placed in the Worker source code.
+- The Worker validates Telegram's `X-Telegram-Bot-Api-Secret-Token` header before dispatching.
+- Duplicate Telegram update IDs are tracked under `bookAgent/webhookUpdates` in Firebase.
+- You can still use **Actions > Telegram Books Approval Bot > Run workflow** for a manual no-payload run; it will safely exit without processing an update.
+- If a run fails, inspect its GitHub Actions log and the corresponding `bookAgent/webhookUpdates/<update_id>` record.
