@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import {
   getUpdates, sendMessage, sendPhotoFile, editMessageText,
-  answerCallbackQuery, telegramApi
+  answerCallbackQuery, telegramApi, editMessageCaption
 } from "./bot-api.js";
 import {
   getBotUpdateOffset, setBotUpdateOffset, savePendingBook,
@@ -137,7 +137,7 @@ async function finishApproval(id, query) {
       });
     });
     await updatePendingBook(id,{status:"completed",completedAt:Date.now()});
-    await editMessageText(pending.chatId,pending.previewMessageId,"✅ تم اعتماد الكتاب ورفعه بنجاح.");
+    await editMessageCaption(pending.chatId,pending.previewMessageId,"✅ تم اعتماد الكتاب ورفعه بنجاح.");
     await answerCallbackQuery(query.id,"تم الرفع بنجاح");
   } catch(e) {
     await updatePendingBook(id,{status:"failed",error:String(e).slice(0,900)});
@@ -189,7 +189,7 @@ async function handleEdit(message) {
   await updatePendingBook(editId,{book_name:name,book_type:grade,status:"awaiting_approval"});
   await snap.setState("editingPendingId",null);
   const caption=`📚 ${name}\nالصف: ${GRADE_NAMES[grade]}\nأعد مراجعة البيانات ثم وافق على الرفع.`;
-  await editMessageText(p.chatId,p.previewMessageId,caption,{reply_markup:keyboard(editId)});
+  await editMessageCaption(p.chatId,p.previewMessageId,caption,{reply_markup:keyboard(editId)});
   await sendMessage(message.chat.id,"تم تحديث البيانات.");
   return true;
 }
