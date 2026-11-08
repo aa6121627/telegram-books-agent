@@ -73,3 +73,38 @@ export async function getState(key, fallback = null) {
 export async function setState(key, value) {
   await db.ref(`bookAgent/state/${key}`).set(value);
 }
+
+/** Persist a pending approval record outside the public /book node. */
+export async function savePendingBook(messageId, pending) {
+  await db.ref(`bookAgent/pending/${messageId}`).set({
+    ...pending,
+    status: "awaiting_approval",
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+}
+
+export async function getPendingBook(messageId) {
+  const snap = await db.ref(`bookAgent/pending/${messageId}`).get();
+  return snap.exists() ? snap.val() : null;
+}
+
+export async function updatePendingBook(messageId, patch) {
+  await db.ref(`bookAgent/pending/${messageId}`).update({
+    ...patch,
+    updatedAt: Date.now()
+  });
+}
+
+export async function deletePendingBookRecord(messageId) {
+  await db.ref(`bookAgent/pending/${messageId}`).remove();
+}
+
+export async function getBotUpdateOffset() {
+  return Number(await getState("telegramUpdateOffset", 0)) || 0;
+}
+
+export async function setBotUpdateOffset(offset) {
+  await setState("telegramUpdateOffset", Number(offset) || 0);
+}
+
