@@ -63,3 +63,16 @@ export function sendDocument(chatId, document, caption = "", options = {}) {
     ...options
   });
 }
+
+export function getUpdates(offset = 0, limit = 100) {
+  return telegramApi("getUpdates", {
+    offset,
+    limit,
+    timeout: 0,
+    allowed_updates: ["message", "callback_query"]
+  });
+}
+
+export function getMe() {
+  return telegramApi("getMe");
+}
