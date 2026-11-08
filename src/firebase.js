@@ -108,3 +108,25 @@ export async function setBotUpdateOffset(offset) {
   await setState("telegramUpdateOffset", Number(offset) || 0);
 }
 
+
+/** Claim a webhook update once; a failed or stale claim may be retried. */
+export async function claimWebhookUpdate(updateId) {
+  const ref = db.ref(`bookAgent/webhookUpdates/${updateId}`);
+  let claimed = false;
+  await ref.transaction(current => {
+    const now = Date.now();
+    if (current?.status === "completed") return;
+    if (current?.status === "processing" && now - Number(current.startedAt || 0) < 15 * 60 * 1000) return;
+    claimed = true;
+    return { status: "processing", startedAt: now, attempts: Number(current?.attempts || 0) + 1 };
+  });
+  return claimed;
+}
+
+export async function finishWebhookUpdate(updateId, status, error = "") {
+  await db.ref(`bookAgent/webhookUpdates/${updateId}`).update({
+    status,
+    finishedAt: Date.now(),
+    ...(error ? { error: String(error).slice(0, 1000) } : {})
+  });
+}
